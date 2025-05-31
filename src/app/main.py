@@ -30,12 +30,14 @@ from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
+from utils import headers
 from typing import List, Tuple, Dict, Any, Optional
 
 # Load environment variables
 load_dotenv()
 # Get Groq API key from environment variables
-groq_api_key = os.getenv("GROQ_API_KEY")
+# groq_api_key = os.getenv("GROQ_API_KEY")
+groq_api_key = headers["authorization"]
 
 # Set protobuf environment variable to avoid error messages
 # This might cause some issues with latency but it's a tradeoff
