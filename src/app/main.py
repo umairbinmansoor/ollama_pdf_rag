@@ -23,11 +23,19 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_ollama import ChatOllama
+# from langchain_ollama import ChatOllama
+from langchain_groq import ChatGroq
 from langchain_core.runnables import RunnablePassthrough
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_groq import ChatGroq
+from dotenv import load_dotenv
 from typing import List, Tuple, Dict, Any, Optional
+
+# Load environment variables
+load_dotenv()
+# Get Groq API key from environment variables
+groq_api_key = os.getenv("GROQ_API_KEY")
 
 # Set protobuf environment variable to avoid error messages
 # This might cause some issues with latency but it's a tradeoff
@@ -136,7 +144,11 @@ def process_question(question: str, vector_db: Chroma, selected_model: str) -> s
     logger.info(f"Processing question: {question} using model: {selected_model}")
     
     # Initialize LLM
-    llm = ChatOllama(model=selected_model)
+    # llm = ChatOllama(model=selected_model)
+    llm = ChatGroq(
+                    model="meta-llama/llama-4-scout-17b-16e-instruct",
+                    temperature=0.7,
+                    api_key=groq_api_key)
     
     # Query prompt template
     QUERY_PROMPT = PromptTemplate(
