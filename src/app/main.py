@@ -124,7 +124,7 @@ def create_vector_db(file_upload) -> FAISS:#Chroma:
         documents=chunks,
         embedding=embeddings,
         # persist_directory=PERSIST_DIRECTORY,
-        collection_name=f"pdf_{hash(file_upload.name)}"  # Unique collection name per file
+        # collection_name=f"pdf_{hash(file_upload.name)}"  # Unique collection name per file
     )
     logger.info("Vector DB created with persistent storage")
 
