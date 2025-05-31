@@ -3,16 +3,23 @@ import logging
 from langchain_ollama.chat_models import ChatOllama
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_groq import ChatGroq
-from google.colab import userdata
+from dotenv import load_dotenv
+import os
 
 logger = logging.getLogger(__name__)
+load_dotenv()
+groq_api_key = os.getenv("GROQ_API_KEY")
 
 class LLMManager:
     """Manages LLM configuration and prompts."""
     
     def __init__(self, model_name: str = "llama2"):
         self.model_name = model_name
-        self.llm = ChatOllama(model=model_name)
+        # self.llm = ChatOllama(model=model_name)
+        self.llm = ChatGroq(
+                    model_name=model_name,
+                    temperature=0.7,
+                    api_key=groq_api_key)
         
     def get_query_prompt(self) -> PromptTemplate:
         """Get query generation prompt."""

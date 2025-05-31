@@ -3,7 +3,9 @@ streamlit==1.40.0
 pdfplumber==0.11.4
 langchain==0.3.14
 langchain-core==0.3.29
-langchain-ollama==0.2.2
+# langchain-ollama==0.2.2
+langchain_groq
+# google.colab
 langchain_community==0.3.14
 langchain_text_splitters==0.3.5
 unstructured>=0.16.12
@@ -18,3 +20,4 @@ pytest-cov==4.1.0
 coverage==7.4.0
 pydantic==2.10.4
 sentence-transformers==3.1.1
+dotenv
