@@ -2,9 +2,9 @@
 import logging
 from typing import List
 from pathlib import Path
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 # from langchain_community.vectorstores import Chroma
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class VectorStore:
             self.vector_db = FAISS.from_documents(
                 documents=documents,
                 embedding=self.embeddings,
-                collection_name=collection_name,
+                # collection_name=collection_name,
                 # persist_directory="/tmp/chroma"  # Persist to disk for Streamlit Cloud
             )
             return self.vector_db

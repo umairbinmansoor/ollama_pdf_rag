@@ -1,6 +1,6 @@
 """LLM configuration and setup."""
 import logging
-from langchain_ollama.chat_models import ChatOllama
+# from langchain_ollama.chat_models import ChatOllama
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
@@ -8,7 +8,7 @@ from app.utils import headers
 import os
 
 logger = logging.getLogger(__name__)
-load_dotenv()
+# load_dotenv()
 # groq_api_key = os.getenv("GROQ_API_KEY")
 groq_api_key = headers["authorization"]
 

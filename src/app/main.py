@@ -21,22 +21,22 @@ from langchain_community.document_loaders import UnstructuredPDFLoader
 # from langchain_ollama import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 # from langchain_community.vectorstores import Chroma
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 # from langchain_ollama import ChatOllama
 from langchain_groq import ChatGroq
 from langchain_core.runnables import RunnablePassthrough
 from langchain.retrievers.multi_query import MultiQueryRetriever
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 from utils import headers
 from typing import List, Tuple, Dict, Any, Optional
 
-# Load environment variables
+# # Load environment variables
 # load_dotenv()
-# Get Groq API key from environment variables
+# # Get Groq API key from environment variables
 # groq_api_key = os.getenv("GROQ_API_KEY")
 groq_api_key = headers["authorization"]
 
@@ -123,7 +123,7 @@ def create_vector_db(file_upload) -> FAISS:#Chroma:
     vector_db = FAISS.from_documents(
         documents=chunks,
         embedding=embeddings,
-        persist_directory=PERSIST_DIRECTORY,
+        # persist_directory=PERSIST_DIRECTORY,
         collection_name=f"pdf_{hash(file_upload.name)}"  # Unique collection name per file
     )
     logger.info("Vector DB created with persistent storage")
@@ -302,8 +302,8 @@ def main() -> None:
                         documents=chunks,
                         # embedding=OllamaEmbeddings(model="nomic-embed-text"),
                         embedding=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2"),
-                        persist_directory=PERSIST_DIRECTORY,
-                        collection_name="sample_pdf"
+                        # persist_directory=PERSIST_DIRECTORY,
+                        # collection_name="sample_pdf"
                     )
                     # Open and display the sample PDF
                     with pdfplumber.open(sample_path) as pdf:
