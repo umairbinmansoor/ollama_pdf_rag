@@ -18,7 +18,7 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning, message='.*torch.classes.*')
 
 from langchain_community.document_loaders import UnstructuredPDFLoader
-from langchain_ollama import OllamaEmbeddings
+# from langchain_ollama import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
@@ -26,6 +26,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_ollama import ChatOllama
 from langchain_core.runnables import RunnablePassthrough
 from langchain.retrievers.multi_query import MultiQueryRetriever
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from typing import List, Tuple, Dict, Any, Optional
 
 # Set protobuf environment variable to avoid error messages
@@ -105,7 +106,8 @@ def create_vector_db(file_upload) -> Chroma:
     logger.info("Document split into chunks")
 
     # Updated embeddings configuration with persistent storage
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    # embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vector_db = Chroma.from_documents(
         documents=chunks,
         embedding=embeddings,
@@ -278,7 +280,8 @@ def main() -> None:
                     chunks = text_splitter.split_documents(data)
                     st.session_state["vector_db"] = Chroma.from_documents(
                         documents=chunks,
-                        embedding=OllamaEmbeddings(model="nomic-embed-text"),
+                        # embedding=OllamaEmbeddings(model="nomic-embed-text"),
+                        embedding=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2"),
                         persist_directory=PERSIST_DIRECTORY,
                         collection_name="sample_pdf"
                     )

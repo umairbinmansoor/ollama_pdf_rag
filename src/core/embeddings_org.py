@@ -2,7 +2,7 @@
 import logging
 from typing import List
 from pathlib import Path
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_ollama import OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
 
 logger = logging.getLogger(__name__)
@@ -10,12 +10,8 @@ logger = logging.getLogger(__name__)
 class VectorStore:
     """Manages vector embeddings and database operations."""
     
-    def __init__(self, embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"):
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=embedding_model,
-            model_kwargs={"device": "cpu"},  # Use CPU for Streamlit Cloud compatibility
-            encode_kwargs={"normalize_embeddings": True}
-        )
+    def __init__(self, embedding_model: str = "nomic-embed-text"):
+        self.embeddings = OllamaEmbeddings(model=embedding_model)
         self.vector_db = None
     
     def create_vector_db(self, documents: List, collection_name: str = "local-rag") -> Chroma:
@@ -25,8 +21,7 @@ class VectorStore:
             self.vector_db = Chroma.from_documents(
                 documents=documents,
                 embedding=self.embeddings,
-                collection_name=collection_name,
-                # persist_directory="/tmp/chroma"  # Persist to disk for Streamlit Cloud
+                collection_name=collection_name
             )
             return self.vector_db
         except Exception as e:
@@ -42,4 +37,4 @@ class VectorStore:
                 self.vector_db = None
             except Exception as e:
                 logger.error(f"Error deleting collection: {e}")
-                raise
+                raise 
