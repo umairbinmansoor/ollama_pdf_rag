@@ -4,7 +4,7 @@ from langchain_ollama.chat_models import ChatOllama
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
-from utils import headers
+from app.utils import headers
 import os
 
 logger = logging.getLogger(__name__)
