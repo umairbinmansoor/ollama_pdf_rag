@@ -11,7 +11,7 @@ import os
 import tempfile
 import shutil
 import pdfplumber
-import ollama
+# import ollama
 import warnings
 
 # Suppress torch warning
@@ -34,7 +34,7 @@ from utils import headers
 from typing import List, Tuple, Dict, Any, Optional
 
 # Load environment variables
-load_dotenv()
+# load_dotenv()
 # Get Groq API key from environment variables
 # groq_api_key = os.getenv("GROQ_API_KEY")
 groq_api_key = headers["authorization"]
@@ -48,7 +48,8 @@ PERSIST_DIRECTORY = os.path.join("data", "vectors")
 
 # Streamlit page configuration
 st.set_page_config(
-    page_title="Ollama PDF RAG Streamlit UI",
+    page_title="Multimodal RAG Playground",
+    # page_description="A Streamlit app for PDF-based Retrieval-Augmented Generation (RAG) using Ollama + LangChain.",
     page_icon="🎈",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -243,11 +244,15 @@ def main() -> None:
     """
     Main function to run the Streamlit application.
     """
-    st.subheader("🧠 Ollama PDF RAG playground", divider="gray", anchor=False)
+    st.subheader("🧠 Multimodal RAG playground", divider="gray", anchor=False)
 
     # Get available models
-    models_info = ollama.list()
-    available_models = extract_model_names(models_info)
+    # models_info = ollama.list()
+    # available_models = extract_model_names(models_info)
+    available_models = (
+        "meta-llama/llama-4-scout-17b-16e-instruct",
+        "meta-llama/llama-4-maverick-17b-128e-instruct"
+    )
 
     # Create layout
     col1, col2 = st.columns([1.5, 2])
