@@ -20,7 +20,8 @@ warnings.filterwarnings('ignore', category=UserWarning, message='.*torch.classes
 from langchain_community.document_loaders import UnstructuredPDFLoader
 # from langchain_ollama import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
+# from langchain_community.vectorstores import Chroma
+from langchain.vectorstores import FAISS
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 # from langchain_ollama import ChatOllama
@@ -92,7 +93,7 @@ def extract_model_names(models_info: Any) -> Tuple[str, ...]:
         return tuple()
 
 
-def create_vector_db(file_upload) -> Chroma:
+def create_vector_db(file_upload) -> FAISS:#Chroma:
     """
     Create a vector database from an uploaded PDF file.
 
@@ -119,7 +120,7 @@ def create_vector_db(file_upload) -> Chroma:
     # Updated embeddings configuration with persistent storage
     # embeddings = OllamaEmbeddings(model="nomic-embed-text")
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    vector_db = Chroma.from_documents(
+    vector_db = FAISS.from_documents(
         documents=chunks,
         embedding=embeddings,
         persist_directory=PERSIST_DIRECTORY,
@@ -132,7 +133,7 @@ def create_vector_db(file_upload) -> Chroma:
     return vector_db
 
 
-def process_question(question: str, vector_db: Chroma, selected_model: str) -> str:
+def process_question(question: str, vector_db: FAISS, selected_model: str) -> str:
     """
     Process a user question using the vector database and selected language model.
 
@@ -211,7 +212,7 @@ def extract_all_pages_as_images(file_upload) -> List[Any]:
     return pdf_pages
 
 
-def delete_vector_db(vector_db: Optional[Chroma]) -> None:
+def delete_vector_db(vector_db: Optional[FAISS]) -> None:
     """
     Delete the vector database and clear related session state.
 
@@ -297,7 +298,7 @@ def main() -> None:
                     data = loader.load()
                     text_splitter = RecursiveCharacterTextSplitter(chunk_size=7500, chunk_overlap=100)
                     chunks = text_splitter.split_documents(data)
-                    st.session_state["vector_db"] = Chroma.from_documents(
+                    st.session_state["vector_db"] = FAISS.from_documents(
                         documents=chunks,
                         # embedding=OllamaEmbeddings(model="nomic-embed-text"),
                         embedding=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2"),

@@ -3,7 +3,8 @@ import logging
 from typing import List
 from pathlib import Path
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+# from langchain_community.vectorstores import Chroma
+from langchain.vectorstores import FAISS
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +19,12 @@ class VectorStore:
         )
         self.vector_db = None
     
-    def create_vector_db(self, documents: List, collection_name: str = "local-rag") -> Chroma:
+    # def create_vector_db(self, documents: List, collection_name: str = "local-rag") -> Chroma:
+    def create_vector_db(self, documents: List, collection_name: str = "local-rag") -> FAISS:
         """Create vector database from documents."""
         try:
             logger.info("Creating vector database")
-            self.vector_db = Chroma.from_documents(
+            self.vector_db = FAISS.from_documents(
                 documents=documents,
                 embedding=self.embeddings,
                 collection_name=collection_name,
