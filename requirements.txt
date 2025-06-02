@@ -24,3 +24,4 @@ python-dotenv
 opencv-python-headless
 faiss-cpu
 langchain-huggingface
+groq

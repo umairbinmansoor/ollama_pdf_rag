@@ -19,6 +19,7 @@ warnings.filterwarnings('ignore', category=UserWarning, message='.*torch.classes
 
 from langchain_community.document_loaders import UnstructuredPDFLoader
 # from langchain_ollama import OllamaEmbeddings
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 # from langchain_community.vectorstores import Chroma
 from langchain_community.vectorstores import FAISS
@@ -31,7 +32,7 @@ from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
-from utils import headers
+from utils import *
 from typing import List, Tuple, Dict, Any, Optional
 
 # # Load environment variables
@@ -113,8 +114,21 @@ def create_vector_db(file_upload) -> FAISS:#Chroma:
         loader = UnstructuredPDFLoader(path)
         data = loader.load()
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=7500, chunk_overlap=100)
-    chunks = text_splitter.split_documents(data)
+    # Extract images
+    images_mapping = extract_images_from_pdf(path, temp_dir)
+    # Image to JSON conversion
+    json_img_list = JSON_extractor(images_mapping, temp_dir, groq_api_key)
+
+    # Converting image-based JSON documents to LangChain Document objects
+    image_documents = [
+    Document(page_content=json_data, metadata={"source": "image", "label": label})
+    for json_data, label in zip(json_img_list, images_mapping.keys())
+]
+    # Step 2: Combine them
+    all_documents = data + image_documents
+
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=300)
+    chunks = text_splitter.split_documents(dall_documents)
     logger.info("Document split into chunks")
 
     # Updated embeddings configuration with persistent storage
@@ -126,6 +140,7 @@ def create_vector_db(file_upload) -> FAISS:#Chroma:
         # persist_directory=PERSIST_DIRECTORY,
         # collection_name=f"pdf_{hash(file_upload.name)}"  # Unique collection name per file
     )
+    vector_db.save_local("/tmp/faiss_index")
     logger.info("Vector DB created with persistent storage")
 
     shutil.rmtree(temp_dir)
