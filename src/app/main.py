@@ -128,7 +128,7 @@ def create_vector_db(file_upload) -> FAISS:#Chroma:
     all_documents = data + image_documents
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=300)
-    chunks = text_splitter.split_documents(dall_documents)
+    chunks = text_splitter.split_documents(all_documents)
     logger.info("Document split into chunks")
 
     # Updated embeddings configuration with persistent storage
