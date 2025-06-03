@@ -105,53 +105,63 @@ def JSON_extractor(images_mapping, output_dir_img, groq_api_key):
 def extract_images_from_pdf(pdf_path, output_dir):
     doc = fitz.open(pdf_path)
     images_mapping = {}
+
     for page_num in range(len(doc)):
         page = doc[page_num]
         image_list = page.get_images(full=True)
+
         for img_index, img in enumerate(image_list):
             xref = img[0]
             base_image = doc.extract_image(xref)
             image_bytes = base_image["image"]
             image_ext = base_image["ext"]
 
-            # Get image bounding box
+            # Try to get bounding box
             try:
                 image_rect = page.get_image_bbox(img)
             except Exception as e:
-                logging.error(f"Warning: Could not get bounding box for image {xref} on page {page_num + 1}: {e}")
+                logging.error(f"Could not get bounding box for image {xref} on page {page_num + 1}: {e}")
                 image_rect = None
 
-            # Extract caption (assuming it's below the image or nearby)
             caption_text = ""
             if image_rect:
-                # Define a region below the image for caption
+                # Extend region below image for multi-line caption (e.g. up to 5 lines)
                 caption_region = fitz.Rect(
                     image_rect.x0,
-                    image_rect.y0 + image_rect.height + 10,
+                    image_rect.y1 + 5,
                     image_rect.x1,
-                    image_rect.y0 + image_rect.height + 50
+                    image_rect.y1 + 100  # Adjust as needed
                 )
-                caption_text = page.get_text("text", clip=caption_region, sort=True)
+                caption_text = page.get_text("text", clip=caption_region, sort=True).strip()
 
-            # Fallback: Extract text from the entire page if no bounding box or caption found
             if not caption_text:
                 caption_text = page.get_text("text")
 
-            # Search for caption pattern
-            caption_match = re.search(r"(Figure|Table) (\d+):[^\n]+", caption_text, re.IGNORECASE)
+            # Updated regex: supports Fig., Tab., multi-line after match
+            caption_match = re.search(
+                r"(Figure|Fig\.|Table|Tab\.)\s*(\d+)\s*[:.\s-]*\s*(.+)",
+                caption_text, re.IGNORECASE | re.DOTALL
+            )
+
+
             if caption_match:
-                label = caption_match.group(0).replace(":", "").strip()
+                # Combine the full label
+                label = f"{caption_match.group(1)} {caption_match.group(2)}"
+                full_caption = f"{label}: {caption_match.group(3).strip()}"
             else:
                 label = f"page{page_num + 1}_img{img_index + 1}"
+                full_caption = ""
 
             # Save image
-            image_filename = f"{label}.{image_ext}"
+            image_filename = f"{label.replace(' ', '_')}.{image_ext}"
             image_path = os.path.join(output_dir, image_filename)
             with open(image_path, "wb") as img_file:
                 img_file.write(image_bytes)
 
-            # Store mapping
-            images_mapping[label] = image_filename
+            images_mapping[label] = {
+                "image_filename": image_filename,
+                "caption": full_caption
+            }
 
     doc.close()
     return images_mapping
