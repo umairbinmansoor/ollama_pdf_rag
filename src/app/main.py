@@ -178,19 +178,16 @@ def process_question(question: str, vector_db: FAISS, selected_model: str) -> st
                     api_key=groq_api_key)
     
     # Query prompt template
-    # QUERY_PROMPT = PromptTemplate(
-    #     input_variables=["question"],
-    #     template="""You are an AI language model assistant. Your task is to generate 2
-    #     different versions of the given user question to retrieve relevant documents from
-    #     a vector database. By generating multiple perspectives on the user question, your
-    #     goal is to help the user overcome some of the limitations of the distance-based
-    #     similarity search. Provide these alternative questions separated by newlines.
-    #     Original question: {question}""",
-    # )
     QUERY_PROMPT = PromptTemplate(
-    input_variables=["context", "question"],
-    template="Based on the following context, answer the question:\n\n{context}\n\nQuestion: {question}")
-
+        input_variables=["question"],
+        template="""You are an AI language model assistant. Your task is to generate 2
+        different versions of the given user question to retrieve relevant documents from
+        a vector database. By generating multiple perspectives on the user question, your
+        goal is to help the user overcome some of the limitations of the distance-based
+        similarity search. Provide these alternative questions separated by newlines.
+        Original question: {question}""",
+    )
+    
     # Set up retriever
     retriever = MultiQueryRetriever.from_llm(
         vector_db.as_retriever(), 
@@ -198,23 +195,24 @@ def process_question(question: str, vector_db: FAISS, selected_model: str) -> st
         prompt=QUERY_PROMPT
     )
 
-    # RAG prompt template
+    docs = retriever.invoke(question)
+    context = "\n\n".join([doc.page_content for doc in docs])
+
+    # Prompt to answer the question based on context
     template = """Answer the question based ONLY on the following context:
     {context}
     Question: {question}
     """
-
     prompt = ChatPromptTemplate.from_template(template)
 
-    # Create chain
     chain = (
-        {"context": retriever, "question": RunnablePassthrough()}
+        {"context": lambda x: x["context"], "question": lambda x: x["question"]}
         | prompt
         | llm
         | StrOutputParser()
     )
 
-    response = chain.invoke(question)
+    response = chain.invoke({"context": context, "question": question})
     logger.info("Question processed and response generated")
     return response
 
