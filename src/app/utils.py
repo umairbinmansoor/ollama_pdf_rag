@@ -158,7 +158,7 @@ def extract_images_from_pdf(pdf_path, output_dir):
                 full_caption = caption_match.group(3).strip()
             else:
                 label = f"page{page_num + 1}_img{img_index + 1}"
-                full_caption = caption_text.strip()  # Use the full caption text if no match found
+                full_caption = ""
 
             # Save image
             image_filename = f"{label}.{image_ext}"
