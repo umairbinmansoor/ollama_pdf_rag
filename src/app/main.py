@@ -112,7 +112,14 @@ def create_vector_db(file_upload) -> FAISS:#Chroma:
         f.write(file_upload.getvalue())
         logger.info(f"File saved to temporary path: {path}")
         loader = UnstructuredPDFLoader(path)
-        data = loader.load()
+        # data = loader.load()
+        data = [
+            Document(
+                page_content=doc.page_content,
+                metadata={"source": doc.metadata.get("source", "pdf")}  # Limit metadata
+            )
+            for doc in loader.load()
+        ]
 
     # Extract images
     images_mapping = extract_images_from_pdf(path, temp_dir)
@@ -121,13 +128,14 @@ def create_vector_db(file_upload) -> FAISS:#Chroma:
 
     # Converting image-based JSON documents to LangChain Document objects
     image_documents = [
-    Document(page_content=json_data, metadata={"source": "image", "label": label})
+    Document(page_content=json_data, 
+             metadata={"source": "image", "label": label})
     for json_data, label in zip(json_img_list, images_mapping.keys())
 ]
     # Step 2: Combine them
     all_documents = data + image_documents
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=300)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_documents(all_documents)
     logger.info("Document split into chunks")
 
@@ -170,15 +178,18 @@ def process_question(question: str, vector_db: FAISS, selected_model: str) -> st
                     api_key=groq_api_key)
     
     # Query prompt template
+    # QUERY_PROMPT = PromptTemplate(
+    #     input_variables=["question"],
+    #     template="""You are an AI language model assistant. Your task is to generate 2
+    #     different versions of the given user question to retrieve relevant documents from
+    #     a vector database. By generating multiple perspectives on the user question, your
+    #     goal is to help the user overcome some of the limitations of the distance-based
+    #     similarity search. Provide these alternative questions separated by newlines.
+    #     Original question: {question}""",
+    # )
     QUERY_PROMPT = PromptTemplate(
-        input_variables=["question"],
-        template="""You are an AI language model assistant. Your task is to generate 2
-        different versions of the given user question to retrieve relevant documents from
-        a vector database. By generating multiple perspectives on the user question, your
-        goal is to help the user overcome some of the limitations of the distance-based
-        similarity search. Provide these alternative questions separated by newlines.
-        Original question: {question}""",
-    )
+    input_variables=["context", "question"],
+    template="Based on the following context, answer the question:\n\n{context}\n\nQuestion: {question}")
 
     # Set up retriever
     retriever = MultiQueryRetriever.from_llm(
@@ -263,8 +274,6 @@ def main() -> None:
     st.subheader("🧠 Multimodal RAG playground", divider="gray", anchor=False)
 
     # Get available models
-    # models_info = ollama.list()
-    # available_models = extract_model_names(models_info)
     available_models = (
         "meta-llama/llama-4-scout-17b-16e-instruct",
         "meta-llama/llama-4-maverick-17b-128e-instruct"
@@ -278,8 +287,6 @@ def main() -> None:
         st.session_state["messages"] = []
     if "vector_db" not in st.session_state:
         st.session_state["vector_db"] = None
-    if "use_sample" not in st.session_state:
-        st.session_state["use_sample"] = False
 
     # Model selection
     if available_models:
@@ -289,64 +296,25 @@ def main() -> None:
             key="model_select"
         )
 
-    # Add checkbox for sample PDF
-    use_sample = col1.toggle(
-        "Use sample PDF (Scammer Agent Paper)", 
-        key="sample_checkbox"
+    # File upload
+    file_upload = col1.file_uploader(
+        "Upload a PDF file ↓", 
+        type="pdf", 
+        accept_multiple_files=False,
+        key="pdf_uploader"
     )
-    
-    # Clear vector DB if switching between sample and upload
-    if use_sample != st.session_state.get("use_sample"):
-        if st.session_state["vector_db"] is not None:
-            st.session_state["vector_db"].delete_collection()
-            st.session_state["vector_db"] = None
-            st.session_state["pdf_pages"] = None
-        st.session_state["use_sample"] = use_sample
 
-    if use_sample:
-        # Use the sample PDF
-        sample_path = "data/pdfs/sample/scammer-agent.pdf"
-        if os.path.exists(sample_path):
-            if st.session_state["vector_db"] is None:
-                with st.spinner("Processing sample PDF..."):
-                    loader = UnstructuredPDFLoader(file_path=sample_path)
-                    data = loader.load()
-                    text_splitter = RecursiveCharacterTextSplitter(chunk_size=7500, chunk_overlap=100)
-                    chunks = text_splitter.split_documents(data)
-                    st.session_state["vector_db"] = FAISS.from_documents(
-                        documents=chunks,
-                        # embedding=OllamaEmbeddings(model="nomic-embed-text"),
-                        embedding=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2"),
-                        # persist_directory=PERSIST_DIRECTORY,
-                        # collection_name="sample_pdf"
-                    )
-                    # Open and display the sample PDF
-                    with pdfplumber.open(sample_path) as pdf:
-                        st.session_state["pdf_pages"] = [page.to_image().original for page in pdf.pages]
-        else:
-            st.error("Sample PDF file not found in the current directory.")
-    else:
-        # Regular file upload with unique key
-        file_upload = col1.file_uploader(
-            "Upload a PDF file ↓", 
-            type="pdf", 
-            accept_multiple_files=False,
-            key="pdf_uploader"
-        )
+    if file_upload:
+        if st.session_state["vector_db"] is None:
+            with st.spinner("Processing uploaded PDF..."):
+                st.session_state["vector_db"] = create_vector_db(file_upload)
+                st.session_state["file_upload"] = file_upload
 
-        if file_upload:
-            if st.session_state["vector_db"] is None:
-                with st.spinner("Processing uploaded PDF..."):
-                    st.session_state["vector_db"] = create_vector_db(file_upload)
-                    # Store the uploaded file in session state
-                    st.session_state["file_upload"] = file_upload
-                    # Extract and store PDF pages
-                    with pdfplumber.open(file_upload) as pdf:
-                        st.session_state["pdf_pages"] = [page.to_image().original for page in pdf.pages]
+                with pdfplumber.open(file_upload) as pdf:
+                    st.session_state["pdf_pages"] = [page.to_image().original for page in pdf.pages]
 
-    # Display PDF if pages are available
+    # Display PDF pages if available
     if "pdf_pages" in st.session_state and st.session_state["pdf_pages"]:
-        # PDF display controls
         zoom_level = col1.slider(
             "Zoom Level", 
             min_value=100, 
@@ -356,7 +324,6 @@ def main() -> None:
             key="zoom_slider"
         )
 
-        # Display PDF pages
         with col1:
             with st.container(height=410, border=True):
                 for page_image in st.session_state["pdf_pages"]:
@@ -376,21 +343,17 @@ def main() -> None:
     with col2:
         message_container = st.container(height=500, border=True)
 
-        # Display chat history
-        for i, message in enumerate(st.session_state["messages"]):
+        for message in st.session_state["messages"]:
             avatar = "🤖" if message["role"] == "assistant" else "😎"
             with message_container.chat_message(message["role"], avatar=avatar):
                 st.markdown(message["content"])
 
-        # Chat input and processing
         if prompt := st.chat_input("Enter a prompt here...", key="chat_input"):
             try:
-                # Add user message to chat
                 st.session_state["messages"].append({"role": "user", "content": prompt})
                 with message_container.chat_message("user", avatar="😎"):
                     st.markdown(prompt)
 
-                # Process and display assistant response
                 with message_container.chat_message("assistant", avatar="🤖"):
                     with st.spinner(":green[processing...]"):
                         if st.session_state["vector_db"] is not None:
@@ -401,7 +364,6 @@ def main() -> None:
                         else:
                             st.warning("Please upload a PDF file first.")
 
-                # Add assistant response to chat history
                 if st.session_state["vector_db"] is not None:
                     st.session_state["messages"].append(
                         {"role": "assistant", "content": response}
@@ -412,7 +374,7 @@ def main() -> None:
                 logger.error(f"Error processing prompt: {e}")
         else:
             if st.session_state["vector_db"] is None:
-                st.warning("Upload a PDF file or use the sample PDF to begin chat...")
+                st.warning("Upload a PDF file to begin chat...")
 
 
 if __name__ == "__main__":
