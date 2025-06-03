@@ -195,8 +195,8 @@ def process_question(question: str, vector_db: FAISS, selected_model: str) -> st
         prompt=QUERY_PROMPT
     )
 
-    docs = retriever.invoke(question)
-    context = "\n\n".join([doc.page_content for doc in docs])
+    # docs = retriever.invoke(question)
+    # context = "\n\n".join([doc.page_content for doc in docs])
 
     # Prompt to answer the question based on context
     template = """Answer the question based ONLY on the following context:
@@ -205,14 +205,22 @@ def process_question(question: str, vector_db: FAISS, selected_model: str) -> st
     """
     prompt = ChatPromptTemplate.from_template(template)
 
-    chain = (
-        {"context": lambda x: x["context"], "question": lambda x: x["question"]}
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
+    # chain = (
+    #     {"context": lambda x: x["context"], "question": lambda x: x["question"]}
+    #     | prompt
+    #     | llm
+    #     | StrOutputParser()
+    # )
 
-    response = chain.invoke({"context": context, "question": question})
+    chain = (
+    {"context": retriever, "question": RunnablePassthrough()}
+    | prompt
+    | llm
+    | StrOutputParser()
+)
+
+    # response = chain.invoke({"context": context, "question": question})
+    response = chain.invoke(question)
     logger.info("Question processed and response generated")
     return response
 
