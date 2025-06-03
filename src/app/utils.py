@@ -128,7 +128,7 @@ def extract_images_from_pdf(pdf_path, output_dir):
                 # Extend region below image for multi-line caption (e.g. up to 5 lines)
                 caption_region = fitz.Rect(
                     image_rect.x0,
-                    image_rect.y1 + 5,
+                    image_rect.y1 + 10,
                     image_rect.x1,
                     image_rect.y1 + 100  # Adjust as needed
                 )
@@ -139,21 +139,21 @@ def extract_images_from_pdf(pdf_path, output_dir):
 
             # Updated regex: supports Fig., Tab., multi-line after match
             caption_match = re.search(
-                r"(Figure|Fig\.|Table|Tab\.)\s*(\d+)\s*[:.\s-]*\s*(.+)",
-                caption_text, re.IGNORECASE | re.DOTALL
-            )
-
-
+                                r"(Figure|Fig\.|Table|Tab\.)\s*(\d+)\s*[:.\s-]*\s*(.+)",
+                                caption_text, re.IGNORECASE | re.DOTALL
+                            )
             if caption_match:
-                # Combine the full label
-                label = f"{caption_match.group(1)} {caption_match.group(2)}"
-                full_caption = f"{label}: {caption_match.group(3).strip()}"
+                prefix = caption_match.group(1).replace(".", "")  # e.g., 'Fig.' → 'Fig'
+                number = caption_match.group(2)
+                label = f"{prefix}{number}"                      # e.g., 'Fig7'
+                full_caption = caption_match.group(0).strip()
             else:
                 label = f"page{page_num + 1}_img{img_index + 1}"
                 full_caption = ""
 
             # Save image
-            image_filename = f"{label.replace(' ', '_')}.{image_ext}"
+            # image_filename = f"{label.replace(' ', '_')}.{image_ext}"
+            image_filename = f"{label}.{image_ext}"
             image_path = os.path.join(output_dir, image_filename)
             with open(image_path, "wb") as img_file:
                 img_file.write(image_bytes)
