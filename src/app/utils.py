@@ -30,7 +30,7 @@ def JSON_extractor(images_mapping, output_dir_img, groq_api_key):
 
     # Pre-encode all images
     encoded_images = {
-        label: encode_image(os.path.join(output_dir_img, img_name))
+        label: encode_image(os.path.join(output_dir_img, img_name['filename']))
         for label, img_name in images_mapping.items()
     }
 
@@ -159,7 +159,7 @@ def extract_images_from_pdf(pdf_path, output_dir):
                 img_file.write(image_bytes)
 
             images_mapping[label] = {
-                "image_filename": image_filename,
+                "filename": image_filename,
                 "caption": full_caption
             }
 
