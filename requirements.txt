@@ -27,3 +27,4 @@ langchain-huggingface
 groq
 PyMuPDF
 pandas
+openai

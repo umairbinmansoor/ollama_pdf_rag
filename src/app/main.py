@@ -16,6 +16,7 @@ import pdfplumber
 # import ollama
 import warnings
 import csv
+import faiss
 
 # Suppress torch warning
 warnings.filterwarnings('ignore', category=UserWarning, message='.*torch.classes.*')
@@ -414,11 +415,24 @@ def main() -> None:
         )
 
         if delete_collection:
-            # delete_vector_db(st.session_state["vector_db"])
-            delete_vector_db(st.session_state["vector_db"])
-            st.session_state.clear()  # Clear all session state
+            try:
+                # If your vector DB is FAISS from Langchain or manually managed, reset here
+                if isinstance(st.session_state.get("vector_db"), FAISS):
+                    # Option 1: Reinitialize (memory only)
+                    embedding_dim = st.session_state["vector_db"].index.d  # Get dim from existing
+                    st.session_state["vector_db"] = FAISS.from_texts([], HuggingFaceEmbeddings(), index=faiss.IndexFlatL2(embedding_dim))
+                else:
+                    # Or call your custom delete logic
+                    delete_vector_db(st.session_state["vector_db"])
+            except Exception as e:
+                st.error(f"Failed to delete vector DB: {e}")
+            
+            # Clear Streamlit state
+            st.session_state.clear()
             st.session_state["messages"] = []
-            st.experimental_rerun()
+
+            # ✅ Use st.rerun() (not experimental_rerun)
+            st.rerun()
 
         # Chat interface
         with col2:
