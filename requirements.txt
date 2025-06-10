@@ -19,7 +19,7 @@ pytest==7.4.4
 pytest-cov==4.1.0
 coverage==7.4.0
 pydantic==2.10.4
-sentence-transformers==3.1.1
+sentence-transformers==3.2.0
 python-dotenv
 opencv-python-headless
 faiss-cpu

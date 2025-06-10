@@ -19,6 +19,7 @@ import csv
 
 # Suppress torch warning
 warnings.filterwarnings('ignore', category=UserWarning, message='.*torch.classes.*')
+warnings.filterwarnings("ignore", category=UserWarning, module="torch")
 
 from langchain_community.document_loaders import UnstructuredPDFLoader
 # from langchain_ollama import OllamaEmbeddings
@@ -222,14 +223,14 @@ def process_question(question: str, vector_db: FAISS, selected_model: str) -> Di
         vector_db.as_retriever(search_kwargs={"k": 3}),
         llm,
         prompt=QUERY_PROMPT
-    ).configurable_fields(transform=filter_metadata)
+    )
 
     # docs = retriever.invoke(question)
     # context = "\n\n".join([doc.page_content for doc in docs])
     
     # Single retrieval call
-    docs = retriever.invoke(question)
-    context = "\n".join([doc.page_content for doc in docs])
+    docs = filter_metadata(retriever.invoke(question))
+    context = "\n".join([doc.page_content[:1000] for doc in docs])
 
     # # Prompt to answer the question based on context
     # template = """Answer the question based ONLY on the following context:
@@ -257,13 +258,13 @@ def process_question(question: str, vector_db: FAISS, selected_model: str) -> Di
 
     chain = prompt | llm | StrOutputParser()
 
-    # response = chain.invoke({"context": context, "question": question})
-    response = ""
-    for chunk in chain.stream({"context": context, "question": question}):
-        response += chunk
+    response = chain.invoke({"context": context, "question": question})
+    # response = ""
+    # for chunk in chain.stream({"context": context, "question": question}):
+    #     response += chunk
     logger.info("Question processed and response generated")
 
-    is_csv = any(keyword in question.lower() for keyword in ["csv", "download"]) and "table" in question.lower()
+    is_csv = any(keyword in question.lower() for keyword in ["csv", "download", "excel"]) and "table" in question.lower()
     return {
         "response": response,
         "is_csv": is_csv,
@@ -454,14 +455,20 @@ def main() -> None:
                             csv_string = result["response"].split("```csv\n")[1].split("```")[0]
                             df = pd.read_csv(io.StringIO(csv_string))
                         except (IndexError, pd.errors.ParserError):
+                            logger.warning(f"CSV parsing failed: {e}, falling back to context")
                             table_data = result["context"]
-                            rows = list(csv.reader(table_data.split("\n")))
-                            if rows:
-                                headers = rows[0]
-                                data = rows[1:] if len(rows) > 1 else []
-                                df = pd.DataFrame(data, columns=headers)
-                            else:
-                                st.error("No table data found")
+                            try:
+                                rows = list(csv.reader(table_data.split("\n"), quoting=csv.QUOTE_MINIMAL))
+                                if rows and len(rows) > 1:
+                                    headers = rows[0]
+                                    data = rows[1:]
+                                    df = pd.DataFrame(data, columns=headers)
+                                else:
+                                    st.error("No valid table data found")
+                                    return
+                            except Exception as e:
+                                st.error(f"Failed to parse table: {e}")
+                                logger.error(f"Table parsing error: {e}")
                                 return
                         
                         csv_buffer = io.StringIO()
