@@ -26,3 +26,4 @@ faiss-cpu
 langchain-huggingface
 groq
 PyMuPDF
+pandas

@@ -6,6 +6,8 @@ and then ask questions about the content using a selected language model.
 """
 
 import streamlit as st
+import pandas as pd
+import io
 import logging
 import os
 import tempfile
@@ -13,6 +15,7 @@ import shutil
 import pdfplumber
 # import ollama
 import warnings
+import csv
 
 # Suppress torch warning
 warnings.filterwarnings('ignore', category=UserWarning, message='.*torch.classes.*')
@@ -131,7 +134,7 @@ def create_vector_db(file_upload) -> FAISS:#Chroma:
     Document(page_content=json_data, 
              metadata={"source": "image", "label": label})
     for json_data, label in zip(json_img_list, images_mapping.keys())
-]
+    ]
     # Step 2: Combine them
     all_documents = data + image_documents
 
@@ -156,7 +159,8 @@ def create_vector_db(file_upload) -> FAISS:#Chroma:
     return vector_db
 
 
-def process_question(question: str, vector_db: FAISS, selected_model: str) -> str:
+# def process_question(question: str, vector_db: FAISS, selected_model: str) -> str:
+def process_question(question: str, vector_db: FAISS, selected_model: str) -> Dict:
     """
     Process a user question using the vector database and selected language model.
 
@@ -173,56 +177,94 @@ def process_question(question: str, vector_db: FAISS, selected_model: str) -> st
     # Initialize LLM
     # llm = ChatOllama(model=selected_model)
     llm = ChatGroq(
-                    model="meta-llama/llama-4-scout-17b-16e-instruct",
+                    model=selected_model,
                     temperature=0.7,
                     api_key=groq_api_key)
     
     # Query prompt template
+    # QUERY_PROMPT = PromptTemplate(
+    #     input_variables=["question"],
+    #     template="""You are an AI language model assistant. Your task is to generate 2
+    #     different versions of the given user question to retrieve relevant documents from
+    #     a vector database. By generating multiple perspectives on the user question, your
+    #     goal is to help the user overcome some of the limitations of the distance-based
+    #     similarity search. Provide these alternative questions separated by newlines.
+    #     Original question: {question}""",
+    # )
     QUERY_PROMPT = PromptTemplate(
         input_variables=["question"],
-        template="""You are an AI language model assistant. Your task is to generate 2
-        different versions of the given user question to retrieve relevant documents from
-        a vector database. By generating multiple perspectives on the user question, your
-        goal is to help the user overcome some of the limitations of the distance-based
-        similarity search. Provide these alternative questions separated by newlines.
-        Original question: {question}""",
+        template="""Generate 1 alternative version of the given user question to retrieve relevant documents from a vector database. Provide the alternative question.
+                    Original question: {question}"""
     )
     
+
+    # Set up retriever with metadata filtering
+    def filter_metadata(docs):
+        return [
+            Document(
+                page_content=doc.page_content,
+                metadata={k: v for k, v in doc.metadata.items() if k in ["source", "label"]}
+            )
+            for doc in docs
+        ]
     # Set up retriever
+    # retriever = MultiQueryRetriever.from_llm(
+    #     vector_db.as_retriever(), 
+    #     llm,
+    #     prompt=QUERY_PROMPT
+    # )
     retriever = MultiQueryRetriever.from_llm(
-        vector_db.as_retriever(), 
+        vector_db.as_retriever(search_kwargs={"k": 3}),
         llm,
         prompt=QUERY_PROMPT
-    )
+    ).configurable_fields(transform=filter_metadata)
 
+    # docs = retriever.invoke(question)
+    # context = "\n\n".join([doc.page_content for doc in docs])
+    
+    # Single retrieval call
     docs = retriever.invoke(question)
-    context = "\n\n".join([doc.page_content for doc in docs])
+    context = "\n".join([doc.page_content for doc in docs])
 
-    # Prompt to answer the question based on context
-    template = """Answer the question based ONLY on the following context:
+    # # Prompt to answer the question based on context
+    # template = """Answer the question based ONLY on the following context:
+    # {context}
+    # Question: {question}
+    # """
+
+    # RAG prompt template
+    template = """Answer the question based ONLY on the following context, ignoring internal metadata (e.g., IDs, UUIDs):
     {context}
     Question: {question}
+    If the question requests a downloadable CSV, format the table data as a valid CSV string with headers and rows, like:
+    ```csv
+    header1,header2,...
+    value1,value2,...
     """
     prompt = ChatPromptTemplate.from_template(template)
 
     # chain = (
-    #     {"context": lambda x: x["context"], "question": lambda x: x["question"]}
+    #     {"context": retriever, "question": RunnablePassthrough()}
     #     | prompt
     #     | llm
     #     | StrOutputParser()
-    # )
+    #     )
 
-    chain = (
-    {"context": retriever, "question": RunnablePassthrough()}
-    | prompt
-    | llm
-    | StrOutputParser()
-)
+    chain = prompt | llm | StrOutputParser()
 
-    response = chain.invoke({"context": context, "question": question})
-    # response = chain.invoke(question)
+    # response = chain.invoke({"context": context, "question": question})
+    response = ""
+    for chunk in chain.stream({"context": context, "question": question}):
+        response += chunk
     logger.info("Question processed and response generated")
-    return response
+
+    is_csv = any(keyword in question.lower() for keyword in ["csv", "download"]) and "table" in question.lower()
+    return {
+        "response": response,
+        "is_csv": is_csv,
+        "context": context
+        }
+    # return response
 
 
 @st.cache_data
@@ -273,114 +315,159 @@ def delete_vector_db(vector_db: Optional[FAISS]) -> None:
         logger.warning("Attempted to delete vector DB, but none was found")
 
 
+@st.cache_resource
+def cached_create_vector_db(file_upload):
+    return create_vector_db(file_upload)
+
+@st.cache_data
+def cached_process_question(question: str, vector_db_id: str, model: str) -> dict:
+    return process_question(question, st.session_state["vector_db"], model)
+
+
 def main() -> None:
     """
     Main function to run the Streamlit application.
     """
-    st.subheader("🧠 Multimodal RAG playground", divider="gray", anchor=False)
+    try:
+        st.subheader("🧠 Multimodal RAG playground", divider="gray", anchor=False)
 
-    # Get available models
-    available_models = (
-        "meta-llama/llama-4-scout-17b-16e-instruct",
-        "meta-llama/llama-4-maverick-17b-128e-instruct"
-    )
-
-    # Create layout
-    col1, col2 = st.columns([1.5, 2])
-
-    # Initialize session state
-    if "messages" not in st.session_state:
-        st.session_state["messages"] = []
-    if "vector_db" not in st.session_state:
-        st.session_state["vector_db"] = None
-
-    # Model selection
-    if available_models:
-        selected_model = col2.selectbox(
-            "Pick a model available locally on your system ↓", 
-            available_models,
-            key="model_select"
+        # Get available models
+        available_models = (
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "meta-llama/llama-4-maverick-17b-128e-instruct"
         )
 
-    # File upload
-    file_upload = col1.file_uploader(
-        "Upload a PDF file ↓", 
-        type="pdf", 
-        accept_multiple_files=False,
-        key="pdf_uploader"
-    )
+        # Create layout
+        col1, col2 = st.columns([1.5, 2])
 
-    if file_upload:
-        if st.session_state["vector_db"] is None:
-            with st.spinner("Processing uploaded PDF..."):
-                st.session_state["vector_db"] = create_vector_db(file_upload)
-                st.session_state["file_upload"] = file_upload
+        # Initialize session state
+        if "messages" not in st.session_state:
+            st.session_state["messages"] = []
+        if "vector_db" not in st.session_state:
+            st.session_state["vector_db"] = None
 
-                with pdfplumber.open(file_upload) as pdf:
-                    st.session_state["pdf_pages"] = [page.to_image().original for page in pdf.pages]
+        # Model selection
+        if available_models:
+            selected_model = col2.selectbox(
+                "Pick a model available locally on your system ↓", 
+                available_models,
+                key="model_select"
+            )
+            if selected_model not in available_models:
+                st.error("Invalid model selected")
+                return
 
-    # Display PDF pages if available
-    if "pdf_pages" in st.session_state and st.session_state["pdf_pages"]:
-        zoom_level = col1.slider(
-            "Zoom Level", 
-            min_value=100, 
-            max_value=1000, 
-            value=700, 
-            step=50,
-            key="zoom_slider"
+        # File upload
+        file_upload = col1.file_uploader(
+            "Upload a PDF file ↓", 
+            type="pdf", 
+            accept_multiple_files=False,
+            key="pdf_uploader"
         )
 
-        with col1:
-            with st.container(height=410, border=True):
-                for page_image in st.session_state["pdf_pages"]:
-                    st.image(page_image, width=zoom_level)
+        if file_upload:
+            # if st.session_state["vector_db"] is None:
+            if st.session_state["vector_db"] is None or st.session_state.get("file_upload") != file_upload:
+                with st.spinner("Processing uploaded PDF..."):
+                    st.session_state["vector_db"] = cached_create_vector_db(file_upload)
+                    st.session_state["file_upload"] = file_upload
 
-    # Delete collection button
-    delete_collection = col1.button(
-        "⚠️ Delete collection", 
-        type="secondary",
-        key="delete_button"
-    )
+                    with pdfplumber.open(file_upload) as pdf:
+                        st.session_state["pdf_pages"] = [page.to_image().original for page in pdf.pages]
 
-    if delete_collection:
-        delete_vector_db(st.session_state["vector_db"])
+        # Display PDF pages if available
+        if "pdf_pages" in st.session_state and st.session_state["pdf_pages"]:
+            zoom_level = col1.slider(
+                "Zoom Level", 
+                min_value=100, 
+                max_value=1000, 
+                value=700, 
+                step=50,
+                key="zoom_slider"
+            )
 
-    # Chat interface
-    with col2:
-        message_container = st.container(height=500, border=True)
+            with col1:
+                with st.container(height=410, border=True):
+                    for page_image in st.session_state["pdf_pages"]:
+                        st.image(page_image, width=zoom_level)
 
-        for message in st.session_state["messages"]:
-            avatar = "🤖" if message["role"] == "assistant" else "😎"
-            with message_container.chat_message(message["role"], avatar=avatar):
-                st.markdown(message["content"])
+        # Delete collection button
+        delete_collection = col1.button(
+            "⚠️ Delete collection", 
+            type="secondary",
+            key="delete_button"
+        )
 
-        if prompt := st.chat_input("Enter a prompt here...", key="chat_input"):
-            try:
-                st.session_state["messages"].append({"role": "user", "content": prompt})
-                with message_container.chat_message("user", avatar="😎"):
-                    st.markdown(prompt)
+        if delete_collection:
+            # delete_vector_db(st.session_state["vector_db"])
+            delete_vector_db(st.session_state["vector_db"])
+            st.session_state.clear()  # Clear all session state
+            st.session_state["messages"] = []
+            st.experimental_rerun()
 
-                with message_container.chat_message("assistant", avatar="🤖"):
-                    with st.spinner(":green[processing...]"):
-                        if st.session_state["vector_db"] is not None:
-                            response = process_question(
-                                prompt, st.session_state["vector_db"], selected_model
-                            )
-                            st.markdown(response)
-                        else:
-                            st.warning("Please upload a PDF file first.")
+        # Chat interface
+        with col2:
+            message_container = st.container(height=500, border=True)
+            max_messages = 20
+            for message in st.session_state["messages"][-max_messages:]:
+                avatar = "🤖" if message["role"] == "assistant" else "😎"
+                with message_container.chat_message(message["role"], avatar=avatar):
+                    st.markdown(message["content"])
 
-                if st.session_state["vector_db"] is not None:
-                    st.session_state["messages"].append(
-                        {"role": "assistant", "content": response}
-                    )
+            if prompt := st.chat_input("Enter a prompt here...", key="chat_input"):
+                try:
+                    st.session_state["messages"].append({"role": "user", "content": prompt})
+                    with message_container.chat_message("user", avatar="😎"):
+                        st.markdown(prompt)
 
-            except Exception as e:
-                st.error(e, icon="⛔️")
-                logger.error(f"Error processing prompt: {e}")
-        else:
-            if st.session_state["vector_db"] is None:
-                st.warning("Upload a PDF file to begin chat...")
+                    with message_container.chat_message("assistant", avatar="🤖"):
+                        with st.spinner(":green[processing...]"):
+                            if st.session_state["vector_db"] is not None:
+                                result = cached_process_question(
+                                    prompt, st.session_state["vector_db"], selected_model
+                                )
+                                st.markdown(result['response'])
+                            else:
+                                st.warning("Please upload a PDF file first.")
+
+                    if st.session_state["vector_db"] is not None:
+                        st.session_state["messages"].append(
+                            {"role": "assistant", "content": result['response']}
+                        )
+
+                    if result["is_csv"]:
+                        try:
+                            csv_string = result["response"].split("```csv\n")[1].split("```")[0]
+                            df = pd.read_csv(io.StringIO(csv_string))
+                        except (IndexError, pd.errors.ParserError):
+                            table_data = result["context"]
+                            rows = list(csv.reader(table_data.split("\n")))
+                            if rows:
+                                headers = rows[0]
+                                data = rows[1:] if len(rows) > 1 else []
+                                df = pd.DataFrame(data, columns=headers)
+                            else:
+                                st.error("No table data found")
+                                return
+                        
+                        csv_buffer = io.StringIO()
+                        df.to_csv(csv_buffer, index=False)
+                        st.download_button(
+                            label="Download Table as CSV",
+                            data=csv_buffer.getvalue(),
+                            file_name="table_data.csv",
+                            mime="text/csv"
+                        )
+
+                except Exception as e:
+                    st.error(e, icon="⛔️")
+                    logger.error(f"Error processing prompt: {e}")
+            else:
+                if st.session_state["vector_db"] is None:
+                    st.warning("Upload a PDF file to begin chat...")
+    except Exception as e:
+        st.error(f"An error occurred: {e}", icon="⛔️")
+        logger.error(f"Main loop error: {e}")
 
 
 if __name__ == "__main__":
