@@ -264,7 +264,7 @@ def process_question(question: str, vector_db: FAISS, selected_model: str) -> Di
     #     response += chunk
     logger.info("Question processed and response generated")
 
-    is_csv = any(keyword in question.lower() for keyword in ["csv", "download", "excel"]) and "table" in question.lower()
+    is_csv = any(keyword in question.lower() for keyword in ["csv", "download", "excel"]) or "table" in question.lower()
     return {
         "response": response,
         "is_csv": is_csv,
