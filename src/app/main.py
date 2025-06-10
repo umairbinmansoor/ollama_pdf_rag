@@ -34,6 +34,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
+from streamlit import cache_data
 from dotenv import load_dotenv
 from utils import *
 from typing import List, Tuple, Dict, Any, Optional
@@ -160,7 +161,7 @@ def create_vector_db(file_upload) -> FAISS:#Chroma:
 
 
 # def process_question(question: str, vector_db: FAISS, selected_model: str) -> str:
-def process_question(question: str, vector_db: FAISS, selected_model: str) -> Dict:
+def process_question(question: str, vector_db: FAISS, selected_model: str) -> Dict[str, str]:
     """
     Process a user question using the vector database and selected language model.
 
@@ -172,6 +173,10 @@ def process_question(question: str, vector_db: FAISS, selected_model: str) -> Di
     Returns:
         str: The generated response to the user's question.
     """
+    if not isinstance(vector_db, FAISS):
+        logger.error(f"Invalid vector_db type: {type(vector_db)}")
+        raise ValueError("vector_db must be a FAISS instance")
+
     logger.info(f"Processing question: {question} using model: {selected_model}")
     
     # Initialize LLM
@@ -316,12 +321,19 @@ def delete_vector_db(vector_db: Optional[FAISS]) -> None:
 
 
 @st.cache_resource
-def cached_create_vector_db(file_upload):
+def cached_create_vector_db(file_upload, _hash=hash):
     return create_vector_db(file_upload)
 
-@st.cache_data
-def cached_process_question(question: str, vector_db_id: str, model: str) -> dict:
-    return process_question(question, st.session_state["vector_db"], model)
+@cache_data
+def cached_process_question(question: str, _vector_db: FAISS, model: str) -> Dict[str, str]:
+    logger.info(f"Caching question: {question} with model: {model}")
+    try:
+        result = process_question(question, _vector_db, model)
+        logger.info(f"Cache hit for question: {question}")
+        return result
+    except Exception as e:
+        logger.error(f"Cache error for question {question}: {e}")
+        raise
 
 
 def main() -> None:
@@ -369,7 +381,9 @@ def main() -> None:
             # if st.session_state["vector_db"] is None:
             if st.session_state["vector_db"] is None or st.session_state.get("file_upload") != file_upload:
                 with st.spinner("Processing uploaded PDF..."):
-                    st.session_state["vector_db"] = cached_create_vector_db(file_upload)
+                    # st.session_state["vector_db"] = cached_create_vector_db(file_upload)
+                    file_hash = hash(file_upload.getvalue())
+                    st.session_state["vector_db"] = cached_create_vector_db(file_upload, file_hash)
                     st.session_state["file_upload"] = file_upload
 
                     with pdfplumber.open(file_upload) as pdf:
